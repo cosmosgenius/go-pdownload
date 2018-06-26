@@ -3,25 +3,12 @@ package pdownload
 import (
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"sync"
-	"time"
 )
-
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-func randString(n int) string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[r.Intn(len(letterRunes))]
-	}
-	return string(b)
-}
 
 //Download download file from <urlStr> to <filepath> use <concurrency> goroutines
 func Download(urlStr string, filepath string, concurrency int) error {
@@ -36,7 +23,7 @@ func Download(urlStr string, filepath string, concurrency int) error {
 	contentLength := resp.ContentLength
 	amountPerConnection := contentLength / int64(concurrency)
 
-	prefix := filepath + randString(10)
+	prefix := filepath + "part"
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 
