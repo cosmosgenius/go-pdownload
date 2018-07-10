@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -20,10 +21,32 @@ func Download(urlStr string, filepath string, concurrency int) error {
 	if err != nil {
 		return err
 	}
-	contentLength := resp.ContentLength
-	amountPerConnection := contentLength / int64(concurrency)
+	if hasAcceptRanges(resp) {
+		contentLength := resp.ContentLength
+		return startConcurrentDownload(filepath, parsedURL, contentLength, concurrency)
+	}
 
+	req, err := http.NewRequest("GET", parsedURL.String(), nil)
+	requestToFile(req, filepath)
+
+	return err
+}
+
+func hasAcceptRanges(resp *http.Response) bool {
+	acceptRanges := resp.Header["Accept-Ranges"]
+	for _, value := range acceptRanges {
+		lowerValue := strings.ToLower(value)
+		if lowerValue == "bytes" {
+			return true
+		}
+	}
+	return false
+}
+
+func startConcurrentDownload(filepath string, downloadurl *url.URL, contentLength int64, concurrency int) error {
+	chunkSize := contentLength / int64(concurrency)
 	prefix := filepath + "part"
+
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 
@@ -32,13 +55,19 @@ func Download(urlStr string, filepath string, concurrency int) error {
 	lastbit = 0
 
 	for i := 0; i < concurrency; i++ {
-		endbit = lastbit + amountPerConnection
-		go downloadPart(parsedURL, lastbit, endbit, prefix, i, &wg)
+		endbit = lastbit + chunkSize
+		go downloadPart(downloadurl, lastbit, endbit, prefix, i, &wg)
 		lastbit = endbit + 1
 	}
+
 	wg.Wait()
 	os.Remove(filepath)
-	mergeFiles(prefix, concurrency, filepath)
+	err := mergeFiles(prefix, concurrency, filepath)
+
+	if err != nil {
+		return err
+	}
+
 	for i := 0; i < concurrency; i++ {
 		prefixfilename := prefix + "." + strconv.Itoa(i)
 		os.Remove(prefixfilename)
@@ -46,14 +75,24 @@ func Download(urlStr string, filepath string, concurrency int) error {
 	return nil
 }
 
-func mergeFiles(prefix string, parts int, outfile string) {
-	out, _ := os.Create(outfile)
+func mergeFiles(prefix string, parts int, outfile string) error {
+	out, err := os.Create(outfile)
+	if err != nil {
+		return err
+	}
 	for i := 0; i < parts; i++ {
 		filename := prefix + "." + strconv.Itoa(i)
-		in, _ := os.Open(filename)
-		io.Copy(out, in)
+		in, err := os.Open(filename)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(out, in)
+		if err != nil {
+			return err
+		}
 		in.Close()
 	}
+	return nil
 }
 
 func downloadPart(
