@@ -21,6 +21,7 @@ func Download(urlStr string, filepath string, concurrency int) error {
 	if err != nil {
 		return err
 	}
+	resp.Body.Close()
 	if hasAcceptRanges(resp) {
 		contentLength := resp.ContentLength
 		return startConcurrentDownload(filepath, parsedURL, contentLength, concurrency)
