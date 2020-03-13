@@ -83,17 +83,25 @@ func mergeFiles(prefix string, parts int, outfile string) error {
 	}
 	for i := 0; i < parts; i++ {
 		filename := prefix + "." + strconv.Itoa(i)
-		in, err := os.Open(filename)
+		_, err := mergeFileInto(out, filename)
 		if err != nil {
 			return err
 		}
-		_, err = io.Copy(out, in)
-		if err != nil {
-			return err
-		}
-		in.Close()
 	}
 	return nil
+}
+
+func mergeFileInto(outfile *os.File, infile string) (*int64, error) {
+	in, err := os.Open(infile)
+	if err != nil {
+		return nil, err
+	}
+	defer in.Close()
+	num, err := io.Copy(outfile, in)
+	if err != nil {
+		return nil, err
+	}
+	return &num, nil
 }
 
 func downloadPart(
